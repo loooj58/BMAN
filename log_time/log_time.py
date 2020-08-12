@@ -1,49 +1,32 @@
-import glob, os, sys
-import numpy as np
-import warnings
-import matplotlib.pyplot as plt
-import re
+import argparse
 import datetime
+import matplotlib.pyplot as plt
+import numpy as np
+import os
 import psycopg2
+import re
+import warnings
+
+from config import *
 
 
-SIZE = 1024
-UNITS = ['seconds', 'minutes', 'hours', 'days']
-START = 'Start date:'
-END = 'End date:'
-SUCCESS = 'Macro finished successfully!'
-START_REGEX = r'Start date: \w{2} \w{3} \d{1,2} \d{1,2}:\d{1,2}:\d{1,2} \w+ \d{4}'
-END_REGEX = r'End date: \w{2} \w{3} \d{1,2} \d{1,2}:\d{1,2}:\d{1,2} \w+ \d{4}'
-MONTH_ARR = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
-UNITS = ['seconds', 'minutes', 'hours', 'days', 'months', 'years']
-SIZE = [1, 60, 60, 24, 30, 12]
-EXCLUDED_EXTENSIONS = ['.py', '.DS_Store', '.png']
-UNSUCCESSFUL_OUT = 'unsuccessful.txt'
-RUN_REGEX = r'run\d+'
-RUN_EXTENSION = '.root'
-UNI_DB_USERNAME = "db_reader"
-UNI_DB_PASSWORD = "reader_pass"
-UNI_DB_NAME = "bmn_db"
-UNI_DB_HOST = "vm221-53.jinr.ru"
+def convert_units(arr):
+	mean = np.mean(arr)
+	u = len(UNITS) - 1
+	for i, unit in enumerate(UNITS):
+		mean = mean / SIZE[i]
+		if mean < SIZE[i+1]:
+			u = i
+			break
+	for i in range (u + 1):
+		arr = arr / SIZE[i]
+	return arr, UNITS[u]
 
-
-
-
-def convert_units(arr, mean):
-    u = len(UNITS) - 1
-    for i, unit in enumerate(UNITS):
-        mean = mean / SIZE[i]
-        if mean < SIZE[i+1]:
-            u = i
-            break
-    for i in range (u + 1):
-        arr = arr / SIZE[i]
-
-    return arr, mean, UNITS[u]
 
 def convert_month(month):
 	res = MONTH_ARR.index(month) + 1
 	return res
+
 
 def get_date(result):
 	year = int(result[7])
@@ -83,71 +66,85 @@ def parse_time(log_file):
 		delta = (end - start).total_seconds()
 	return delta, is_successful, run_num
 
+
 def get_events_count(run_num):
 	conn = psycopg2.connect(dbname=UNI_DB_NAME, user=UNI_DB_USERNAME, 
 	                        password=UNI_DB_PASSWORD, host=UNI_DB_HOST)
 	cursor = conn.cursor()
 	cursor.execute(f'SELECT event_count FROM run_ WHERE run_number = {run_num}')
-	count = cursor.fetchone()[0]
+	count = cursor.fetchone()
+	if count is None:
+		return None
+	count = count[0]
 	cursor.close()
 	conn.close()
 	return count
 
+def is_file_to_parse(root, file):
+	filepath = os.path.join(root, file)
+	correct_ext = all([not file.endswith(ext) for ext in EXCLUDED_EXTENSIONS])
+	correct_folder = all([elem not in os.path.join(root, file) for elem in FOLDERS_IGNORE])
+	return correct_ext and correct_folder
 
 def parse_dir(dirname):
 	time_arr = []
-	count_events_arr = []
+	time_per_events_arr = []
 	unsuccessful_arr = []
 	for root, dirs, files in os.walk(dirname):
 		for file in files:
-			if all([not file.endswith(ext) for ext in EXCLUDED_EXTENSIONS]):
+			if is_file_to_parse(root, file):
 				time, is_successful, run_num = parse_time(os.path.join(root, file))
 				if time is not None:
-					time_arr.append(time)
-					count_events_arr = get_events_count(run_num)
+					if run_num is not None:
+						time_arr.append(time)
+						time_per_events_arr.append(time / get_events_count(run_num))
+					elif is_successful == True:
+						warnings.warn("Can not parse run number in successfully ended log file")
+				elif is_successful == True:
+					warnings.warn("Can not parse time in successfully ended log file")
 				if is_successful == False and file != UNSUCCESSFUL_OUT:
 					unsuccessful_arr.append(file)
 	if time_arr == []:
 		warnings.warn("No data")
 		return np.array([]), 0., []
-	return np.array(time_arr), np.mean(np.array(time_arr)), unsuccessful_arr, np.array(count_events_arr)
+	return np.array(time_arr), np.array(time_per_events_arr), unsuccessful_arr
 
-def plot(mean, arr, unit, bins):
-	title = f'Time, {unit}. Mean = {mean} {unit}.'
-	plt.hist(arr, label=title, bins=bins)
-	plt.title(title)
-	plt.show()
 
-def save(mean, arr, unit, bins):
-	title = f'Time size, {unit}. Mean = {mean} {unit}.'
-	plt.hist(arr, label=title, bins=bins)
+def plot_stats(array, bins, title, filename=None):
+	plt.clf()
+	plt.hist(array, bins=bins)
+	plt.axvline(np.mean(array), linestyle='dashed', linewidth=1)
 	plt.title(title)
-	plt.savefig('time.png', dpi=300)
+	if filename is None:
+		plt.show()
+	else:
+		plt.savefig(filename, dpi=DPI)
+
 
 def main():
-	dirname = '.'
-	bins = 10
-	bins_time_per_event = 10
-	if len(sys.argv) > 1:
-		dirname = sys.argv[1]
-	if len(sys.argv) > 2:
-		bins = sys.argv[2]
-	if len(sys.argv) > 2:
-		bins_time_per_event = sys.argv[3]
-	arr, mean, unsuccessful_arr, count_events_arr = parse_dir(dirname)
-	arr_time_per_event = arr / count_events_arr
-	mean_time_per_event = np.mean(arr_time_per_event)
-	arr_time_per_event, mean_time_per_event, unit_time_per_event = convert_units(arr_time_per_event, mean_time_per_event)
-	arr, mean, unit = convert_units(arr, mean)
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--dirname', type=str, help='Name of directory to explore', default='.')
+	parser.add_argument('--bins', type=int, help='Number of bins for time histogram', default=10)
+	parser.add_argument('--bins_per_event', type=int, help='Number of bins for time per event histogram', default=10)
+	args = parser.parse_args()
+	dirname, bins, bins_per_event = args.dirname, args.bins, args.bins_per_event
+
+	arr, arr_per_event, unsuccessful_arr = parse_dir(dirname)
+
+	arr, unit = convert_units(arr)
+	title = f'Time, {unit}. Mean = {np.mean(arr)} {unit}.'
+	plot_stats(arr, bins, title, NAME_TIME)
+
+	arr_per_event, unit_per_event = convert_units(arr_per_event)
+	title_per_event = f'Time per event, {unit_per_event}. Mean = {np.mean(arr_per_event)} {unit_per_event}.'
+	plot_stats(arr_per_event, bins_per_event, title_per_event, NAME_TIME_PER_EVENT)
+
+
 	with open(UNSUCCESSFUL_OUT, 'w') as f:
 		for elem in unsuccessful_arr:
 			f.write(elem + '\n')
-	save(mean, arr, unit, bins)
-	plot(mean, arr, unit, bins)
-	save(mean_time_per_event, arr_time_per_event, unit_time_per_event, bins_time_per_event)
-	plot(mean_time_per_event, arr_time_per_event, unit_time_per_event, bins_time_per_event)
-
 
 
 if __name__ == '__main__':
 	main()
+

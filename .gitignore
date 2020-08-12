@@ -1,3 +1,5 @@
 *.ipynb
 .DS_Store
 .ipynb_checkpoints/
+file_size/__pycache__
+log_time/__pycache__

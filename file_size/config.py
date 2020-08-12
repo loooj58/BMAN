@@ -1,0 +1,12 @@
+SIZE = 1024
+UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB']
+EXTENSIONS = [".data", ".root"]
+RUN_NUM_REGEX = r'\d+'
+UNI_DB_USERNAME = "db_reader"
+UNI_DB_PASSWORD = "reader_pass"
+UNI_DB_NAME = "bmn_db"
+UNI_DB_HOST = "vm221-53.jinr.ru"
+DPI = 300
+NAME_FILESIZE = 'filesize.png'
+NAME_FILESIZE_PER_EVENT = 'filesize_per_event.png'
+FOLDERS_IGNORE = ['__pycache__']
