@@ -17,4 +17,4 @@ UNI_DB_HOST = "vm221-53.jinr.ru"
 NAME_TIME = 'time.png'
 NAME_TIME_PER_EVENT = 'time_per_event.png'
 DPI = 300
-FOLDERS_IGNORE = ['__pycache__']
+FOLDERS_IGNORE = ['__pycache__', 'myenv']
