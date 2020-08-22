@@ -7,144 +7,137 @@ import psycopg2
 import re
 import warnings
 
-from config import *
+import log_time.config as config
 
 
-def convert_units(arr):
-	mean = np.mean(arr)
-	u = len(UNITS) - 1
-	for i, unit in enumerate(UNITS):
-		mean = mean / SIZE[i]
-		if mean < SIZE[i+1]:
-			u = i
-			break
-	for i in range (u + 1):
-		arr = arr / SIZE[i]
-	return arr, UNITS[u]
+class TimeStatComputer:
+	def __init__(self, config_dict):
 
+		self.EXTENSIONS = config_dict.get('extensions_time')
+		self.DB_USER = config_dict.get('db_user')
+		self.DB_PASS = config_dict.get('db_pass')
+		self.DB_NAME = config_dict.get('db_name')
+		self.DB_HOST = config_dict.get('db_host')
 
-def convert_month(month):
-	res = MONTH_ARR.index(month) + 1
-	return res
+		self.DPI = config_dict.get('dpi', config.DPI)
+		self.FOLDERS_IGNORE = config.FOLDERS_IGNORE
+		self.FOLDERS_IGNORE.extend(config_dict.get('folders_ignore', config.FOLDERS_IGNORE))
+		self.BINS = config_dict.get('bins_time', config.BINS)
+		self.BINS_PER_EVENT = config_dict.get('bins_time_per_event', config.BINS_PER_EVENT)
 
+	def get_events_count(self, run_num):
+		conn = psycopg2.connect(dbname=self.DB_NAME, user=self.DB_USER, 
+		                        password=self.DB_PASS, host=self.DB_HOST)
+		cursor = conn.cursor()
+		cursor.execute(f'SELECT event_count FROM run_ WHERE run_number = {run_num}')
+		count = cursor.fetchone()
+		if count is None:
+			return None
+		count = count[0]
+		cursor.close()
+		conn.close()
+		return count
 
-def get_date(result):
-	year = int(result[7])
-	month = convert_month(result[3])
-	day = int(result[4])
-	time = result[5].split(':')
-	hour = int(time[0])
-	minute = int(time[1])
-	second = int(time[2])
-	return year, month, day, hour, minute, second
+	def is_file_to_parse(self, root, file):
+		filepath = os.path.join(root, file)
+		correct_ext = any([(ext in file) for ext in self.EXTENSIONS])
+		correct_folder = all([elem not in os.path.join(root, file) for elem in self.FOLDERS_IGNORE])
+		return correct_ext and correct_folder
 
-
-def parse_time(log_file):
-	is_successful = False
-	start = None
-	end = None
-	run_num = None
-	with open(log_file, 'r') as f:
-		for line in f:
-			if START in line:
-				result = re.search(START_REGEX, line).group().split()
-				y, m, d, h, minute, s = get_date(result)
-				start = datetime.datetime(y, m, d, hour=h, minute=minute, second=s)
-			if END in line:
-				result = re.search(END_REGEX, line).group().split()
-				y, m, d, h, minute, s = get_date(result)
-				end = datetime.datetime(y, m, d, hour=h, minute=minute, second=s)
-			if SUCCESS in line:
-				is_successful = True
-			if RUN_EXTENSION in line and run_num == None:
-				result = re.search(RUN_REGEX, line)
-				if result != None:
-					run_num = int(result.group()[3:])
-	if start == None or end == None:
-		delta = None
-	else:
-		delta = (end - start).total_seconds()
-	return delta, is_successful, run_num
-
-
-def get_events_count(run_num):
-	conn = psycopg2.connect(dbname=UNI_DB_NAME, user=UNI_DB_USERNAME, 
-	                        password=UNI_DB_PASSWORD, host=UNI_DB_HOST)
-	cursor = conn.cursor()
-	cursor.execute(f'SELECT event_count FROM run_ WHERE run_number = {run_num}')
-	count = cursor.fetchone()
-	if count is None:
-		return None
-	count = count[0]
-	cursor.close()
-	conn.close()
-	return count
-
-def is_file_to_parse(root, file):
-	filepath = os.path.join(root, file)
-	correct_ext = all([not file.endswith(ext) for ext in EXCLUDED_EXTENSIONS])
-	correct_folder = all([elem not in os.path.join(root, file) for elem in FOLDERS_IGNORE])
-	return correct_ext and correct_folder
-
-def parse_dir(dirname):
-	time_arr = []
-	time_per_events_arr = []
-	unsuccessful_arr = []
-	for root, dirs, files in os.walk(dirname):
-		for file in files:
-			if is_file_to_parse(root, file):
-				time, is_successful, run_num = parse_time(os.path.join(root, file))
-				if time is not None:
-					if run_num is not None:
-						time_arr.append(time)
-						time_per_events_arr.append(time / get_events_count(run_num))
+	def parse_dir(self, dirname):
+		time_arr = []
+		time_per_events_arr = []
+		unsuccessful_arr = []
+		for root, dirs, files in os.walk(dirname):
+			for file in files:
+				if self.is_file_to_parse(root, file):
+					time, is_successful, run_num = self.parse_time(os.path.join(root, file))
+					if time is not None:
+						if run_num is not None:
+							time_arr.append(time)
+							time_per_events_arr.append(time / self.get_events_count(run_num))
+						elif is_successful == True:
+							warnings.warn("Can not parse run number in successfully ended log file")
 					elif is_successful == True:
-						warnings.warn("Can not parse run number in successfully ended log file")
-				elif is_successful == True:
-					warnings.warn("Can not parse time in successfully ended log file")
-				if is_successful == False and file != UNSUCCESSFUL_OUT:
-					unsuccessful_arr.append(file)
-	if time_arr == []:
-		warnings.warn("No data")
-		return np.array([]), 0., []
-	return np.array(time_arr), np.array(time_per_events_arr), unsuccessful_arr
+						warnings.warn("Can not parse time in successfully ended log file")
+					if is_successful == False:
+						unsuccessful_arr.append(os.path.join(root, file))
+		if time_arr == []:
+			warnings.warn("No data")
+			return np.array([]), 0., []
+		return np.array(time_arr), np.array(time_per_events_arr), unsuccessful_arr
+
+	def compute(self, dirname):
+		arr, arr_per_event, unsuccessful_arr = self.parse_dir(dirname)
+
+		arr, unit = self.convert_units(arr)
+		title = f'Time, {unit}. Mean = {np.mean(arr):.3f} {unit}.'
+
+		arr_per_event, unit_per_event = self.convert_units(arr_per_event)
+		title_per_event = f'Time per event, {unit_per_event}. Mean = {np.mean(arr_per_event):.3f} {unit_per_event}.'
+
+		if len(unsuccessful_arr) == 0:
+			print('All runs ended successfully.\n')
+		else:
+			print('Unsuccessfully ended runs:')
+			for elem in unsuccessful_arr:
+				print(elem, '\n')
+
+		return (arr, unit, title, arr_per_event, unit_per_event, title_per_event)
 
 
-def plot_stats(array, bins, title, filename=None):
-	plt.clf()
-	plt.hist(array, bins=bins)
-	plt.axvline(np.mean(array), linestyle='dashed', linewidth=1)
-	plt.title(title)
-	if filename is None:
-		plt.show()
-	else:
-		plt.savefig(filename, dpi=DPI)
+	def convert_units(self, arr):
+		mean = np.mean(arr)
+		u = len(config.UNITS) - 1
+		for i, unit in enumerate(config.UNITS):
+			mean = mean / config.SIZE[i]
+			if mean < config.SIZE[i+1]:
+				u = i
+				break
+		for i in range (u + 1):
+			arr = arr / config.SIZE[i]
+		return arr, config.UNITS[u]
 
 
-def main():
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--dirname', type=str, help='Name of directory to explore', default='.')
-	parser.add_argument('--bins', type=int, help='Number of bins for time histogram', default=10)
-	parser.add_argument('--bins_per_event', type=int, help='Number of bins for time per event histogram', default=10)
-	args = parser.parse_args()
-	dirname, bins, bins_per_event = args.dirname, args.bins, args.bins_per_event
-
-	arr, arr_per_event, unsuccessful_arr = parse_dir(dirname)
-
-	arr, unit = convert_units(arr)
-	title = f'Time, {unit}. Mean = {np.mean(arr)} {unit}.'
-	plot_stats(arr, bins, title, NAME_TIME)
-
-	arr_per_event, unit_per_event = convert_units(arr_per_event)
-	title_per_event = f'Time per event, {unit_per_event}. Mean = {np.mean(arr_per_event)} {unit_per_event}.'
-	plot_stats(arr_per_event, bins_per_event, title_per_event, NAME_TIME_PER_EVENT)
+	def convert_month(self, month):
+		res = config.MONTH_ARR.index(month) + 1
+		return res
 
 
-	with open(UNSUCCESSFUL_OUT, 'w') as f:
-		for elem in unsuccessful_arr:
-			f.write(elem + '\n')
+	def get_date(self, result):
+		year = int(result[7])
+		month = self.convert_month(result[3])
+		day = int(result[4])
+		time = result[5].split(':')
+		hour = int(time[0])
+		minute = int(time[1])
+		second = int(time[2])
+		return year, month, day, hour, minute, second
 
 
-if __name__ == '__main__':
-	main()
-
+	def parse_time(self, log_file):
+		is_successful = False
+		start = None
+		end = None
+		run_num = None
+		with open(log_file, 'r') as f:
+			for line in f:
+				if config.START in line:
+					result = re.search(config.START_REGEX, line).group().split()
+					y, m, d, h, minute, s = self.get_date(result)
+					start = datetime.datetime(y, m, d, hour=h, minute=minute, second=s)
+				if config.END in line:
+					result = re.search(config.END_REGEX, line).group().split()
+					y, m, d, h, minute, s = self.get_date(result)
+					end = datetime.datetime(y, m, d, hour=h, minute=minute, second=s)
+				if config.SUCCESS in line:
+					is_successful = True
+				if config.RUN_EXTENSION in line and run_num == None:
+					result = re.search(config.RUN_REGEX, line)
+					if result != None:
+						run_num = int(result.group()[3:])
+		if start == None or end == None:
+			delta = None
+		else:
+			delta = (end - start).total_seconds()
+		return delta, is_successful, run_num
