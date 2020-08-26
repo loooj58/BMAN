@@ -13,11 +13,11 @@ def main():
 		For more info see https://github.com/loooj58/BMAN'
 	)
 	parser.add_argument(
-		'--dirname', '-d',
-		nargs='?',
+		'--dir', '-d',
+		nargs=1,
 		type=str,
 		help='Name of directory to explore',
-		default='.'
+		required=True
 	)
 	parser.add_argument(
 		'--size', '-s',
@@ -31,10 +31,10 @@ def main():
 	)
 	parser.add_argument(
 		'--config', '-c',
-		nargs='?',
+		nargs=1,
 		type=str,
 		help='Path to config file, default is ./config.txt',
-		default='./config.txt'
+		required=True
 	)
 	parser.add_argument(
 		'--output', '-o',
@@ -45,12 +45,12 @@ def main():
 		)
 
 	args = parser.parse_args()
-	dirname, size, time, config, output = \
-	args.dirname, args.size, args.time, args.config, args.output
+	dir, size, time, config, output = \
+	args.dir[0], args.size, args.time, args.config[0], args.output
 
 	config_dict = json.load(open(config, 'r'))
 
-	plot_all_stats(size, time, config_dict, dirname, output)
+	plot_all_stats(size, time, config_dict, dir, output)
 
 
 if __name__ == '__main__':

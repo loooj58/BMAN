@@ -13,7 +13,7 @@ import log_time.config as config
 class TimeStatComputer:
 	def __init__(self, config_dict):
 
-		self.EXTENSIONS = config_dict.get('extensions_time')
+		self.EXTENSIONS = config_dict.get('extensions')
 		self.DB_USER = config_dict.get('db_user')
 		self.DB_PASS = config_dict.get('db_pass')
 		self.DB_NAME = config_dict.get('db_name')
@@ -22,8 +22,6 @@ class TimeStatComputer:
 		self.DPI = config_dict.get('dpi', config.DPI)
 		self.FOLDERS_IGNORE = config.FOLDERS_IGNORE
 		self.FOLDERS_IGNORE.extend(config_dict.get('folders_ignore', config.FOLDERS_IGNORE))
-		self.BINS = config_dict.get('bins_time', config.BINS)
-		self.BINS_PER_EVENT = config_dict.get('bins_time_per_event', config.BINS_PER_EVENT)
 
 	def get_events_count(self, run_num):
 		conn = psycopg2.connect(dbname=self.DB_NAME, user=self.DB_USER, 
@@ -44,11 +42,11 @@ class TimeStatComputer:
 		correct_folder = all([elem not in os.path.join(root, file) for elem in self.FOLDERS_IGNORE])
 		return correct_ext and correct_folder
 
-	def parse_dir(self, dirname):
+	def parse_dir(self, dir):
 		time_arr = []
 		time_per_events_arr = []
 		unsuccessful_arr = []
-		for root, dirs, files in os.walk(dirname):
+		for root, dirs, files in os.walk(dir):
 			for file in files:
 				if self.is_file_to_parse(root, file):
 					time, is_successful, run_num = self.parse_time(os.path.join(root, file))
@@ -63,12 +61,11 @@ class TimeStatComputer:
 					if is_successful == False:
 						unsuccessful_arr.append(os.path.join(root, file))
 		if time_arr == []:
-			warnings.warn("No data")
-			return np.array([]), 0., []
+			raise Exception("No data")
 		return np.array(time_arr), np.array(time_per_events_arr), unsuccessful_arr
 
-	def compute(self, dirname):
-		arr, arr_per_event, unsuccessful_arr = self.parse_dir(dirname)
+	def compute(self, dir):
+		arr, arr_per_event, unsuccessful_arr = self.parse_dir(dir)
 
 		arr, unit = self.convert_units(arr)
 		title = f'Time, {unit}. Mean = {np.mean(arr):.3f} {unit}.'

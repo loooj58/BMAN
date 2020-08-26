@@ -12,7 +12,7 @@ import file_size.config as config
 class SizeStatComputer:
 	def __init__(self, config_dict):
 
-		self.EXTENSIONS = config_dict.get('extensions_size')
+		self.EXTENSIONS = config_dict.get('extensions')
 		self.DB_USER = config_dict.get('db_user')
 		self.DB_PASS = config_dict.get('db_pass')
 		self.DB_NAME = config_dict.get('db_name')
@@ -21,9 +21,6 @@ class SizeStatComputer:
 		self.DPI = config_dict.get('dpi', config.DPI)
 		self.FOLDERS_IGNORE = config.FOLDERS_IGNORE
 		self.FOLDERS_IGNORE.extend(config_dict.get('folders_ignore', config.FOLDERS_IGNORE))
-		self.BINS = config_dict.get('bins_size', config.BINS)
-		self.BINS_PER_EVENT = config_dict.get('bins_size_per_event', config.BINS_PER_EVENT)
-
 
 	def compute(self, dirname):
 		arr, arr_per_event = self.parse_dir(dirname)
@@ -45,18 +42,17 @@ class SizeStatComputer:
 					filesize_bytes = os.stat(os.path.join(root, file)).st_size
 					run_num = re.search(config.RUN_NUM_REGEX, file)
 					if run_num is None:
-						warnings.warn("No run number found in filename")
+						warnings.warn(f'No run number found in filename for file {os.path.join(root, file)}')
 					else:
 						run_num = run_num.group()
 						run_count = self.get_events_count(run_num)
 						if run_count is None:
-							warnings.warn("No run number found in database")
+							warnings.warn(f'No run number found in database for file {os.path.join(root, file)}')
 						else:
 							filesize_arr.append(filesize_bytes)
 							filesize_per_event.append(filesize_bytes / run_count)
 		if filesize_arr == []:
-			warnings.warn("No data")
-			return np.array([]), np.array([])
+			raise Exception("No data")
 		return np.array(filesize_arr), np.array(filesize_per_event)
 
 

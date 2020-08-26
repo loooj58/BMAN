@@ -3,7 +3,7 @@
 Данный скрипт нужно запускать, используя python 3.6+, с помощью команды `python stats.py` с различными аргументами:
 
 ```
-usage: stats.py [-h] [--dirname [DIRNAME]] [--size] [--time]
+usage: stats.py [-h] [--dir [dir]] [--size] [--time]
                 [--config [CONFIG]] [--output [OUTPUT]]
 
 Script for size and time statistics. For more info see
@@ -11,7 +11,7 @@ https://github.com/loooj58/BMAN
 
 optional arguments:
   -h, --help            show this help message and exit
-  --dirname [DIRNAME], -d [DIRNAME]
+  --dir [dir], -d [dir]
                         Name of directory to explore
   --size, -s            Compute size statistics
   --time, -t            Compute time statistics
@@ -31,10 +31,6 @@ optional arguments:
 опциональные:
 * `dpi` - dpi для сохранения/показа картинки
 * `folders_ignore` - папки, которые не нужно рассматирвать при обработке
-* `bins_size` - число бинов для гистограммы размера файлов
-* `bins_size_per_event` - число бинов для гистограммы размера событий
-* `bins_time` - число бинов для гистограммы времени выполнения рана
-* `bins_time_per_event` - число бинов для гистограммы времени выполнения событий
 
 
 Установка необходимых библиотек происходит с помощью `pip install requirements.txt` или другим любым известным Вам способом.

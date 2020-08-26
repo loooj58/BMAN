@@ -1,11 +1,6 @@
 SIZE = 1024
 UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB']
-# EXTENSIONS = [".data", ".root"]
 RUN_NUM_REGEX = r'\d+'
-# DB_USER = "db_reader"
-# DB_PASS = "reader_pass"
-# DB_NAME = "bmn_db"
-# DB_HOST = "vm221-53.jinr.ru"
 DPI = 300
 FOLDERS_IGNORE = ['__pycache__']
 BINS = 10
