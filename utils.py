@@ -6,18 +6,18 @@ from file_size.file_size import SizeStatComputer
 import file_size.config as config_size
 import log_time.config as config_time
 
-def plot_all_stats(size, time, config_dict, dir, output):
+def plot_all_stats(size, time, config_dict, _dir, output, recursive):
 	plt.clf()
 	if size and time:
 		data = {}
 		computer = SizeStatComputer(config_dict)
 		arr, unit, title, arr_per_event, unit_per_event, title_per_event\
-		= computer.compute(dir)
+		= computer.compute(_dir, recursive)
 		
 		computer_time = TimeStatComputer(config_dict)
 		arr_time, unit_time, title_time,\
 		arr_per_event_time, unit_per_event_time,\
-		title_per_event_time  = computer_time.compute(dir)
+		title_per_event_time  = computer_time.compute(_dir, recursive)
 
 		fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(20, 10))
 
@@ -45,7 +45,7 @@ def plot_all_stats(size, time, config_dict, dir, output):
 	elif size:
 		computer = SizeStatComputer(config_dict)
 		arr, unit, title, arr_per_event, unit_per_event, title_per_event\
-		= computer.compute(dir)
+		= computer.compute(_dir, recursive)
 
 		fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(20, 10))
 
@@ -65,7 +65,7 @@ def plot_all_stats(size, time, config_dict, dir, output):
 	elif time:
 		computer = TimeStatComputer(config_dict)
 		arr, unit, title, arr_per_event, unit_per_event, title_per_event\
-		= computer.compute(dir)
+		= computer.compute(_dir, recursive)
 
 		fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(20, 10))
 

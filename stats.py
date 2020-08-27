@@ -30,6 +30,11 @@ def main():
 		help='Compute time statistics'
 	)
 	parser.add_argument(
+		'--recursive', '-r',
+		action='store_true',
+		help='Recursive data search'
+	)
+	parser.add_argument(
 		'--config', '-c',
 		nargs=1,
 		type=str,
@@ -45,12 +50,13 @@ def main():
 		)
 
 	args = parser.parse_args()
-	dir, size, time, config, output = \
-	args.dir[0], args.size, args.time, args.config[0], args.output
+	_dir, size, time, config, output, recursive = \
+	args.dir[0], args.size, args.time,\
+	args.config[0], args.output, args.recursive
 
 	config_dict = json.load(open(config, 'r'))
 
-	plot_all_stats(size, time, config_dict, dir, output)
+	plot_all_stats(size, time, config_dict, _dir, output, recursive)
 
 
 if __name__ == '__main__':

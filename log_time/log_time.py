@@ -42,11 +42,16 @@ class TimeStatComputer:
 		correct_folder = all([elem not in os.path.join(root, file) for elem in self.FOLDERS_IGNORE])
 		return correct_ext and correct_folder
 
-	def parse_dir(self, dir):
+	def parse_dir(self, _dir, recursive):
 		time_arr = []
 		time_per_events_arr = []
 		unsuccessful_arr = []
-		for root, dirs, files in os.walk(dir):
+		if recursive:
+			files_to_walk = os.walk(_dir)
+		else:
+			files_to_walk = [next(os.walk(_dir))]
+
+		for root, dirs, files in files_to_walk:
 			for file in files:
 				if self.is_file_to_parse(root, file):
 					time, is_successful, run_num = self.parse_time(os.path.join(root, file))
@@ -64,8 +69,8 @@ class TimeStatComputer:
 			raise Exception("No data")
 		return np.array(time_arr), np.array(time_per_events_arr), unsuccessful_arr
 
-	def compute(self, dir):
-		arr, arr_per_event, unsuccessful_arr = self.parse_dir(dir)
+	def compute(self, _dir, recursive):
+		arr, arr_per_event, unsuccessful_arr = self.parse_dir(_dir, recursive)
 
 		arr, unit = self.convert_units(arr)
 		title = f'Time, {unit}. Mean = {np.mean(arr):.3f} {unit}.'

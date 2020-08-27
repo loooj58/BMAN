@@ -22,8 +22,8 @@ class SizeStatComputer:
 		self.FOLDERS_IGNORE = config.FOLDERS_IGNORE
 		self.FOLDERS_IGNORE.extend(config_dict.get('folders_ignore', config.FOLDERS_IGNORE))
 
-	def compute(self, dirname):
-		arr, arr_per_event = self.parse_dir(dirname)
+	def compute(self, _dir, recursive):
+		arr, arr_per_event = self.parse_dir(_dir, recursive)
 
 		arr, unit = self.convert_units(arr)
 		title = f'File size, {unit}. Mean = {np.mean(arr):.3f} {unit}.'
@@ -33,10 +33,16 @@ class SizeStatComputer:
 
 		return (arr, unit, title, arr_per_event, unit_per_event, title_per_event)
 
-	def parse_dir(self, dirname):
+	def parse_dir(self, _dir, recursive):
 		filesize_arr = []
 		filesize_per_event = []
-		for root, dirs, files in os.walk(dirname):
+
+		if recursive:
+			files_to_walk = os.walk(_dir)
+		else:
+			files_to_walk = [next(os.walk(_dir))]
+
+		for root, dirs, files in files_to_walk:
 			for file in files:
 				if self.is_file_to_parse(root, file):
 					filesize_bytes = os.stat(os.path.join(root, file)).st_size
